@@ -1,0 +1,36 @@
+{
+  "name": "json-data-regexp",
+  "version": "0.1.0",
+  "description": "RegExp to validate and match JSON data",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thenikso/json-data-regexp.git"
+  },
+  "keywords": [
+    "regexp",
+    "json",
+    "data",
+    "validate"
+  ],
+  "author": "Nicola Peduzzi <thenikso@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/thenikso/json-data-regexp/issues"
+  },
+  "homepage": "https://github.com/thenikso/json-data-regexp#readme",
+  "devDependencies": {
+    "typescript": "^4.9.5",
+    "vitest": "^0.29.2"
+  }
+}
