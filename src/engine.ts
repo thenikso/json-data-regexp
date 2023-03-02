@@ -1,9 +1,34 @@
+interface GroupResult {
+  value: any;
+  groups?: { [key: string]: GroupResult[] };
+}
+
+interface Result {
+  match: boolean;
+  value: any;
+  error?: Error;
+  groups?: { [key: string]: GroupResult[] };
+}
+
 type Path = (string | number)[];
 type Group = {
   scope: Path;
-  save: (value: any, acc: any, path: Path) => any;
   result: any;
+  groups: { [key: string]: Group[] };
 };
+
+function groupToGroupResult(group: Group): GroupResult {
+  const res: GroupResult = {
+    value: group.result,
+  };
+  if (Object.keys(group.groups).length > 0) {
+    res.groups = {} as { [key: string]: GroupResult[] };
+    for (const key of Object.keys(group.groups)) {
+      res.groups[key] = group.groups[key].map(groupToGroupResult);
+    }
+  }
+  return res;
+}
 
 function getAtPath(data: any, path: Path): any {
   let value = data;
@@ -20,30 +45,34 @@ function getAtPath(data: any, path: Path): any {
  * Returns the new root object.
  */
 function setAtPath(data: any, path: Path, value: any): any {
+  return updateAtPath(data, path, () => value);
+}
+
+function updateAtPath(data: any, path: Path, f: (value: any) => any): any {
   if (path.length === 0) {
-    return value;
+    return f(data);
   }
   const key = path[0];
   if (path.length === 1) {
     if (typeof key === 'number') {
       const array = [...(data || [])];
-      array[key] = value;
+      array[key] = f(array?.[key]);
       return array;
     } else {
       return {
         ...(data || {}),
-        [key]: value,
+        [key]: f(data?.[key]),
       };
     }
   }
   if (typeof key === 'number') {
     const array = [...(data || [])];
-    array[key] = setAtPath(array[key], path.slice(1), value);
+    array[key] = updateAtPath(array[key], path.slice(1), f);
     return array;
   } else {
     return {
       ...(data || {}),
-      [key]: setAtPath(data[key], path.slice(1), value),
+      [key]: updateAtPath(data[key], path.slice(1), f),
     };
   }
 }
@@ -52,7 +81,8 @@ class Context {
   constructor(
     private data: any,
     private path: Path,
-    private defaultGroup: Group,
+    private rootGroup: Group,
+    private groupPath: Path,
   ) {}
 
   get key(): string | number {
@@ -75,7 +105,12 @@ class Context {
   }
 
   enter(key: string | number): Context {
-    return new Context(this.data, [...this.path, key], this.defaultGroup);
+    return new Context(
+      this.data,
+      [...this.path, key],
+      this.rootGroup,
+      this.groupPath,
+    );
   }
 
   exit(key: string | number): Context {
@@ -83,7 +118,12 @@ class Context {
     if (lastkey !== key) {
       throw new Error(`Expected to exit ${key} but was ${lastkey}`);
     }
-    return new Context(this.data, this.path.slice(0, -1), this.defaultGroup);
+    return new Context(
+      this.data,
+      this.path.slice(0, -1),
+      this.rootGroup,
+      this.groupPath,
+    );
   }
 
   get inArray(): boolean {
@@ -103,7 +143,8 @@ class Context {
     return new Context(
       this.data,
       [...this.path.slice(0, -1), index + 1],
-      this.defaultGroup,
+      this.rootGroup,
+      this.groupPath,
     );
   }
 
@@ -112,16 +153,75 @@ class Context {
   }
 
   save(value: any): Context {
-    const defaultGroup = {
-      ...this.defaultGroup,
-      // result: this.defaultGroup.save(value, this.defaultGroup.result, this.path)
-      result: setAtPath(this.defaultGroup.result, this.path, value),
+    const rootGroup = {
+      ...this.rootGroup,
+      result: setAtPath(this.rootGroup.result, this.path, value),
     };
-    return new Context(this.data, this.path, defaultGroup);
+    if (this.groupPath.length > 0) {
+      const groups = updateAtPath(
+        rootGroup.groups,
+        this.groupPath.slice(1),
+        (g: Group) => ({
+          ...g,
+          result: setAtPath(g.result, this.path.slice(g.scope.length), value),
+        }),
+      );
+      rootGroup.groups = groups;
+    }
+    return new Context(this.data, this.path, rootGroup, this.groupPath);
   }
 
   get result() {
-    return this.defaultGroup.result;
+    return this.rootGroup.result;
+  }
+
+  enterGroup(name: string): Context {
+    const groupPath = [...this.groupPath, 'groups', name];
+    const rootGroup: Group = { ...this.rootGroup };
+    let parentGroup = rootGroup;
+    for (let i = 0, l = groupPath.length - 2; i < l; i += 3) {
+      const gg = groupPath[i] as 'groups';
+      const gn = groupPath[i + 1] as string;
+      const gi = groupPath[i + 2] as number;
+      const gs = parentGroup[gg][gn];
+      const g = gs[gi];
+      parentGroup.groups = {
+        ...parentGroup.groups,
+        [gn]: [
+          ...gs.slice(0, gi),
+          {
+            ...g,
+            groups: {
+              ...g.groups,
+            },
+          },
+          ...gs.slice(gi + 1),
+        ],
+      };
+      parentGroup = parentGroup[gg][gn][gi];
+    }
+    const groups = [...(parentGroup.groups[name] || [])];
+    parentGroup.groups = {
+      ...parentGroup.groups,
+      [name]: groups,
+    };
+    const group: Group = {
+      scope: [...this.path],
+      result: null,
+      groups: {},
+    };
+    const groupIndex = groups.push(group) - 1;
+    groupPath.push(groupIndex);
+    return new Context(this.data, this.path, rootGroup, groupPath);
+  }
+
+  exitGroup(): Context {
+    const groupPath = this.groupPath.slice(0, -3);
+    return new Context(this.data, this.path, this.rootGroup, groupPath);
+  }
+
+  get groupsResults(): { [key: string]: GroupResult[] } {
+    return groupToGroupResult(this.rootGroup).groups ?? {};
   }
 }
 
@@ -247,11 +347,14 @@ export function zeroOrOne(parser: Parser) {
   };
 }
 
-export function group(name: string, parser: Parser) {
+export function group(name: string, ...parsers: Parser[]) {
   return (ctx: Context) => {
-    // TODO save groups
-    console.log(name)
-    return parser(ctx);
+    ctx = ctx.enterGroup(name);
+    for (const parser of parsers) {
+      ctx = parser(ctx);
+    }
+    ctx = ctx.exitGroup();
+    return ctx;
   };
 }
 
@@ -276,17 +379,27 @@ export function array(...parsers: Parser[]) {
 export class JsonRegExp {
   constructor(private parser: Parser) {}
 
-  exec(data: any) {
-    const ctx = new Context(data, [], {
-      scope: [],
-      save: (x) => x,
-      result: null,
-    });
+  exec(data: any): Result {
+    const ctx = new Context(
+      data,
+      [],
+      {
+        scope: [],
+        result: null,
+        groups: {},
+      },
+      [],
+    );
+    const res = Object.create(null) as Result;
     try {
-      return this.parser(ctx).result;
-    } catch (err) {
-      console.log(err);
-      return null;
+      const out = this.parser(ctx);
+      res.match = true;
+      res.value = out.result;
+      res.groups = out.groupsResults;
+    } catch (err: any) {
+      res.match = false;
+      res.error = err;
     }
+    return res;
   }
 }
