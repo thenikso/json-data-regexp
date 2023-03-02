@@ -250,6 +250,7 @@ export function zeroOrOne(parser: Parser) {
 export function group(name: string, parser: Parser) {
   return (ctx: Context) => {
     // TODO save groups
+    console.log(name)
     return parser(ctx);
   };
 }
