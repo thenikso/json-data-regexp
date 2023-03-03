@@ -74,22 +74,22 @@ function updateAtPath(data: any, path: Path, f: (value: any) => any): any {
 }
 
 class Context {
+  private _value: any;
+
   constructor(
     private data: any,
     private path: Path,
     private rootGroup: Group,
     private groupPath: Path,
-  ) {}
-
-  get key(): string | number {
-    return this.path[this.path.length - 1];
+  ) {
+    this._value = getAtPath(data, path);
   }
 
   get value(): any {
-    return getAtPath(this.data, this.path);
+    return this._value;
   }
 
-  has(key: string): boolean {
+  has(key: string | number): boolean {
     if (!this.value || typeof this.value !== 'object') {
       throw new Error(
         `Expected object at ${this.toString()}, got ${typeof this.value} (${
@@ -101,6 +101,9 @@ class Context {
   }
 
   enter(key: string | number): Context {
+    if (!this.has(key)) {
+      throw new Error(`Expected key "${key}" at ${this.toString()}`);
+    }
     return new Context(
       this.data,
       [...this.path, key],
@@ -255,8 +258,12 @@ export function val(value: string | number | boolean) {
 
 export function field(name: string, parser: Parser) {
   return (ctx: Context) => {
-    if (!ctx.has(name)) {
-      throw new Error(`Missing field "${name}" at ${ctx.toString()}`);
+    if (
+      !ctx.value ||
+      typeof ctx.value !== 'object' ||
+      Array.isArray(ctx.value)
+    ) {
+      throw new Error(`Expected object at ${ctx.toString()}`);
     }
     return parser(ctx.enter(name)).exit(name);
   };
