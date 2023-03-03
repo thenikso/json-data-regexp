@@ -66,17 +66,20 @@ describe('group', () => {
     });
   });
 
-  it('should return multiple groups with nested groups', () => {
+  it('should return nested groups', () => {
     const test = new JsonRegExp(
-      array(
-        group('g1', group('g2', val('document'))),
-        group('g3', val('page')),
+      obj(
+        field('type', group('g1', val('document'))),
+        field('test', group('g2', array(val('out'), group('g3', val('in'))))),
       ),
     );
-    const actual = test.exec(['document', 'page']);
+    const actual = test.exec({
+      type: 'document',
+      test: ['out', 'in'],
+    });
     expect(actual.groups).toEqual({
-      g1: [{ value: null, groups: { g2: [{ value: 'document' }] } }],
-      g3: [{ value: 'page' }],
+      g1: [{ value: 'document' }],
+      g2: [{ value: ['out', 'in'], groups: { g3: [{ value: 'in' }] } }],
     });
   });
 });

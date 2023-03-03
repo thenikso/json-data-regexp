@@ -60,7 +60,11 @@ export class JsonPath<T, P extends [...any[]] = [], K = KeyAtPath<T, P>> {
   }
 }
 
-function updateAtPath(data: any, path: Path, f: (value: any) => any): any {
+function updateAtPath(
+  data: any,
+  path: (string | number)[],
+  f: (value: any) => any,
+): any {
   if (path.length === 0) {
     return f(data);
   }
@@ -89,7 +93,9 @@ function updateAtPath(data: any, path: Path, f: (value: any) => any): any {
   }
 }
 
-let p = new JsonPath({ a: { b: [1] } });
+// TODO test this
+
+// let p = new JsonPath({ a: { b: [1] } });
 // p.value();
 // const pp = p.enter('a').updateValue((x) => x.b);
 

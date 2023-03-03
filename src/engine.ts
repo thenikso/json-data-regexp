@@ -148,6 +148,19 @@ class Context {
     );
   }
 
+  exitArray(): Context {
+    const lastkey = this.path[this.path.length - 1];
+    if (typeof lastkey !== 'number') {
+      throw new Error(`Expected to exit array but path is ${this.toString()}`);
+    }
+    return new Context(
+      this.data,
+      this.path.slice(0, -1),
+      this.rootGroup,
+      this.groupPath,
+    );
+  }
+
   toString() {
     return ['$', ...this.path].join('.');
   }
@@ -158,14 +171,13 @@ class Context {
       result: setAtPath(this.rootGroup.result, this.path, value),
     };
     if (this.groupPath.length > 0) {
-      const groups = updateAtPath(
-        rootGroup.groups,
-        this.groupPath.slice(1),
-        (g: Group) => ({
+      let groups = rootGroup.groups;
+      for (let p = this.groupPath.slice(1); p.length > 0; p = p.slice(0, -3)) {
+        groups = updateAtPath(groups, p, (g: Group) => ({
           ...g,
           result: setAtPath(g.result, this.path.slice(g.scope.length), value),
-        }),
-      );
+        }));
+      }
       rootGroup.groups = groups;
     }
     return new Context(this.data, this.path, rootGroup, this.groupPath);
@@ -372,7 +384,7 @@ export function array(...parsers: Parser[]) {
         ctx = ctx.enterNextArrayIndex();
       }
     }
-    return ctx;
+    return ctx.exitArray();
   };
 }
 
