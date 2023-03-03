@@ -39,15 +39,11 @@ function getAtPath(data: any, path: Path): any {
 }
 
 /**
- * Set a value at a path in an object.
+ * Updates a value at a path in an object.
  * It clones the objects and arrays in the modified path
  * and creates missing objects and arrays as needed.
  * Returns the new root object.
  */
-function setAtPath(data: any, path: Path, value: any): any {
-  return updateAtPath(data, path, () => value);
-}
-
 function updateAtPath(data: any, path: Path, f: (value: any) => any): any {
   if (path.length === 0) {
     return f(data);
@@ -168,14 +164,18 @@ class Context {
   save(value: any): Context {
     const rootGroup = {
       ...this.rootGroup,
-      result: setAtPath(this.rootGroup.result, this.path, value),
+      result: updateAtPath(this.rootGroup.result, this.path, () => value),
     };
     if (this.groupPath.length > 0) {
       let groups = rootGroup.groups;
       for (let p = this.groupPath.slice(1); p.length > 0; p = p.slice(0, -3)) {
         groups = updateAtPath(groups, p, (g: Group) => ({
           ...g,
-          result: setAtPath(g.result, this.path.slice(g.scope.length), value),
+          result: updateAtPath(
+            g.result,
+            this.path.slice(g.scope.length),
+            () => value,
+          ),
         }));
       }
       rootGroup.groups = groups;
@@ -189,41 +189,18 @@ class Context {
 
   enterGroup(name: string): Context {
     const groupPath = [...this.groupPath, 'groups', name];
-    const rootGroup: Group = { ...this.rootGroup };
-    let parentGroup = rootGroup;
-    for (let i = 0, l = groupPath.length - 2; i < l; i += 3) {
-      const gg = groupPath[i] as 'groups';
-      const gn = groupPath[i + 1] as string;
-      const gi = groupPath[i + 2] as number;
-      const gs = parentGroup[gg][gn];
-      const g = gs[gi];
-      parentGroup.groups = {
-        ...parentGroup.groups,
-        [gn]: [
-          ...gs.slice(0, gi),
-          {
-            ...g,
-            groups: {
-              ...g.groups,
-            },
-          },
-          ...gs.slice(gi + 1),
-        ],
-      };
-      parentGroup = parentGroup[gg][gn][gi];
-    }
-    const groups = [...(parentGroup.groups[name] || [])];
-    parentGroup.groups = {
-      ...parentGroup.groups,
-      [name]: groups,
-    };
-    const group: Group = {
-      scope: [...this.path],
-      result: null,
-      groups: {},
-    };
-    const groupIndex = groups.push(group) - 1;
-    groupPath.push(groupIndex);
+    const rootGroup = updateAtPath(this.rootGroup, groupPath, (groups) => {
+      const newGroups = [
+        ...(groups || []),
+        {
+          scope: this.path,
+          result: null,
+          groups: {},
+        },
+      ];
+      groupPath.push(newGroups.length - 1);
+      return newGroups;
+    });
     return new Context(this.data, this.path, rootGroup, groupPath);
   }
 
