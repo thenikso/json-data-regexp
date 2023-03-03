@@ -61,7 +61,7 @@ describe('group', () => {
     );
     const actual = test.exec(['document', 'document', 'page']);
     expect(actual.groups).toEqual({
-      g1: [{ value: 'document' }],
+      g1: [{ value: ['document', 'document'] }],
       g2: [{ value: 'page' }],
     });
   });

@@ -177,7 +177,16 @@ class Context {
           result: updateAtPath(
             g.result,
             this.path.slice(g.scope.length),
-            () => value,
+            (oldValue) => {
+              if (typeof oldValue !== 'undefined') {
+                if (!Array.isArray(oldValue)) {
+                  oldValue = [oldValue];
+                }
+                oldValue.push(value);
+                return oldValue;
+              }
+              return value;
+            },
           ),
         }));
       }
@@ -197,7 +206,7 @@ class Context {
         ...(groups || []),
         {
           scope: this.path,
-          result: null,
+          result: undefined,
           groups: {},
         },
       ];
@@ -343,9 +352,10 @@ export function zeroOrOne(parser: Parser) {
   };
 }
 
-export function group(name: string, ...parsers: Parser[]) {
+export function group(name: string, parser: Parser, ...parsers: Parser[]) {
   return (ctx: Context) => {
     ctx = ctx.enterGroup(name);
+    ctx = parser(ctx);
     for (const parser of parsers) {
       ctx = parser(ctx);
     }
@@ -381,7 +391,7 @@ export class JsonRegExp {
       [],
       {
         scope: [],
-        result: null,
+        result: undefined,
         groups: {},
       },
       [],
